@@ -9,6 +9,7 @@ class Myst {
     constructor ( uri ) {
         this.uri = uri;
         this.proposals = [];
+        this.forbidden_proposals = [];
         this.consumer_id = '';
         this.max_retries = 10;
     }
@@ -19,18 +20,20 @@ class Myst {
             let config = {
                 method: 'get',
                 maxBodyLength: Infinity,
-                url: `${ this.uri }/proposals`,
+                // url: `${ this.uri }/proposals`,
+                url: `https://discovery.mysterium.network/api/v4/proposals`,
                 headers: {}
             };
 
             const response = await axios.request( config );
             const data = JSON.parse( JSON.stringify( response.data ) );
-            this.proposals = data.proposals;
+            this.proposals = data/*.proposals*/;
 
             fs.writeFileSync( './proposals.json', JSON.stringify( this.proposals, null, 2 ) );
 
             customConsole( "Proposals updated length: ", this.proposals.length );
         } catch ( error ) {
+            console.log( error );
             customConsole( "updateProposals", error.message );
             throw new Error( 'Failed to fetch proposals' );
         }
@@ -51,7 +54,7 @@ class Myst {
 
             // assert throw if consumer id null
 
-            if ( this.consumer_id == '' )
+            if ( !this.consumer_id )
                 throw new Error( 'consumer id is null, first connect vpn and disconnect' );
 
             customConsole( "Got consumer ID: ", this.consumer_id );
@@ -84,7 +87,13 @@ class Myst {
             throw new Error( 'No proposals available' );
 
         const randomIndex = Math.floor( Math.random() * this.proposals.length );
-        return this.proposals[ randomIndex ];
+        const data = this.proposals[ randomIndex ];
+        customConsole( "Random proposal: ", data.provider_id );
+        if ( await this.checkProvider( data.provider_id ) )
+            return await this.getRandomProposal();
+
+        await this.appendProvider( data.provider_id );
+        return data;
     }
 
     async connectProposal ( proposal, retry = 0 ) {
@@ -158,7 +167,6 @@ class Myst {
                 throw new Error( 'Failed to disconnect' );
         } catch ( error ) {
             customConsole( "stopConnection", error.message );
-            throw new Error( 'Failed to disconnect' );
         }
     }
 
@@ -195,6 +203,25 @@ class Myst {
         fs.appendFileSync( file, `${ ip }\n` );
     }
 
+
+
+    async checkProvider ( provider ) {
+        const file = `./provider.txt`;
+
+        if ( !fs.existsSync( file ) ) {
+            fs.writeFileSync( file, '' );
+        }
+
+        const lines = fs.readFileSync( file, 'utf-8' ).split( '\n' );
+        return lines.includes( provider );
+    }
+
+    async appendProvider ( provider ) {
+        const file = `./provider.txt`;
+        fs.appendFileSync( file, `${ provider }\n` );
+    }
+
+
     async controlIP () {
         const ip = await this.getConnectedIP();
         customConsole( "Connected IP: ", ip );
@@ -209,20 +236,19 @@ class Myst {
     }
 };
 
+export default Myst;
 
-// export default Myst;
-
-( async () => {
-    const myst = new Myst( 'http://localhost:44050' );
-    await myst.getConsumerId(); // get consumer id
-    await myst.updateProposals(); // get proposals ( use this shit for one time when the code launched )
-    const proposal = await myst.getRandomProposal();
-    await myst.connectProposal( proposal ); // auto connect, disconnect no need to check it 
-    const resp = await myst.controlIP(); // tbh i am creating game accounts i need 1 ip 1 account that's why i have command like this.
-    if ( resp ) {
-        await myst.stopConnection();
-        customConsole( "After Ip: ", await myst.getConnectedIP() );
-    }
-    else
-        throw new Error( `We got same ip.` );
-} )();
+// ( async () => {
+//     const myst = new Myst( 'http://localhost:44050' );
+//     await myst.getConsumerId(); // get consumer id
+//     await myst.updateProposals(); // get proposals ( use this shit for one time when the code launched )
+//     const proposal = await myst.getRandomProposal();
+//     await myst.connectProposal( proposal ); // auto connect, disconnect no need to check it
+//     const resp = await myst.controlIP(); // tbh i am creating game accounts i need 1 ip 1 account that's why i have command like this.
+//     if ( resp ) {
+//         await myst.stopConnection();
+//         customConsole( "After Ip: ", await myst.getConnectedIP() );
+//     }
+//     else
+//         throw new Error( `We got same ip.` );
+// } )();
